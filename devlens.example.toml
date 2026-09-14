@@ -1,0 +1,24 @@
+# Configure named projects; secrets are read from environment variables.
+concurrency = 5
+max_analyses = 8
+analysis_timeout = 120
+
+[projects.payments]
+jira_url = "https://your-team.atlassian.net"
+jira_email = "you@example.com"
+jira_token_env = "PAYMENTS_JIRA_TOKEN"
+git_provider = "bitbucket_cloud"
+# Atlassian email + API token use Basic auth. Omit git_email for a Bearer access token.
+git_email = "you@example.com"
+git_token_env = "PAYMENTS_BITBUCKET_TOKEN"
+repositories = ["your-workspace/payments", "your-workspace/ledger"]
+jira_projects = ["PAY", "LEDGER"]
+
+[projects.platform]
+jira_url = "https://your-team.atlassian.net"
+jira_email = "you@example.com"
+jira_token_env = "PLATFORM_JIRA_TOKEN"
+git_provider = "github"
+git_token_env = "PLATFORM_GITHUB_TOKEN"
+repositories = ["your-org/platform"]
+jira_projects = ["PLAT"]
