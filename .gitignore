@@ -1,10 +1,21 @@
-.venv/
 __pycache__/
 *.py[cod]
-.pytest_cache/
-.hypothesis/
-*.egg-info/
+.venv/
 build/
 dist/
+*.egg-info/
+.coverage
+coverage.xml
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .env
 devlens.toml
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+node_modules/
+web/dist/
+# Built into the package by the Docker web stage; never committed.
+src/devlens/web/
+workspace/

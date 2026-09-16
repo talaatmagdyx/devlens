@@ -1,0 +1,43 @@
+# Hosted, multi-tenant configuration. Used only by devlens.app.saas:app, and
+# only when DEVLENS_SAAS_CONFIG points at it.
+#
+# This file is written by the operator. Nothing in it is ever supplied by an
+# HTTP caller, and a startup error here fails startup rather than falling back
+# to open access.
+
+# Every browser write must carry this exact Origin.
+public_origin = "https://devlens.your-company.example"
+
+# One directory per tenant is created under here, mode 0700: its own job store,
+# approval queue, state and audit log. One worker per data directory, enforced
+# with a file lock.
+data_dir = "/var/lib/devlens"
+
+session_seconds = 3600
+requests_per_minute = 120
+max_inflight_per_tenant = 16
+max_jobs_per_tenant = 8
+
+# A project belongs to exactly one tenant. Listing it twice is refused at load,
+# because shared state between tenants is the failure that matters here.
+[tenants.payments]
+projects = ["payments"]
+
+[tenants.platform]
+projects = ["platform"]
+
+# Identities authenticate with a bearer token held in an environment variable.
+# Tokens must be at least 32 ASCII characters and unique across identities;
+# generate them randomly (`python -c "import secrets; print(secrets.token_urlsafe(32))"`).
+#
+# role = "viewer" may read. role = "operator" may also submit runs. Neither can
+# perform a remote write: hosted write-back is disabled outright.
+[identities.ana]
+tenant = "payments"
+role = "operator"
+token_env = "DEVLENS_TOKEN_ANA"
+
+[identities.ben]
+tenant = "platform"
+role = "viewer"
+token_env = "DEVLENS_TOKEN_BEN"

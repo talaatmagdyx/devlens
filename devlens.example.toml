@@ -2,6 +2,12 @@
 concurrency = 5
 max_analyses = 8
 analysis_timeout = 120
+rate_limit_per_second = 20
+rate_limit_burst = 40
+circuit_failure_threshold = 5
+circuit_recovery_seconds = 30
+http_timeout = 15
+http_connect_timeout = 5
 
 [projects.payments]
 jira_url = "https://your-team.atlassian.net"

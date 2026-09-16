@@ -1,0 +1,165 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  backend:
+    name: Backend (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      # The sandbox and workspace tests shell out to these; without them the
+      # suite would skip exactly the code that touches the outside world.
+      - name: Install system tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends git ripgrep
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Type check
+        run: mypy
+
+      - name: Test
+        # No credentials are configured, deliberately: every capability must be
+        # off by default and the suite must pass with nothing switched on. The
+        # coverage gate is in pyproject.toml and fails the run on its own.
+        run: pytest -q --cov=devlens --cov-report=term-missing --cov-report=xml
+
+      - name: Live provider contract
+        # Unauthenticated public endpoints only. A skip here is reported, never
+        # silently treated as a pass.
+        run: pytest -q tests/test_live_contract.py -rs
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.python }}
+          path: coverage.xml
+          if-no-files-found: warn
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # The browser suite runs the real application, so this job needs the
+      # backend as well as the bundle.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install system tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends git ripgrep
+
+      - name: Install
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npx vite build
+
+      - name: Browser end to end
+        # Real Chromium against a real DevLens process: the console, the
+        # network, the layout at phone width and a WCAG 2.1 AA audit of every
+        # surface, in both themes.
+        run: |
+          python3 -m venv ../.venv
+          ../.venv/bin/pip install -q -e "..[dev]"
+          npx playwright install --with-deps chromium
+          npx playwright test
+
+      - name: The workflow's own commands, run from the workflow file
+        # scripts/run-workflow.py executes each `run:` block in this file
+        # verbatim. Running it here means the file cannot drift away from the
+        # commands a developer runs locally, because there is only one copy.
+        working-directory: .
+        run: python3 -m pip install pyyaml && python3 scripts/run-workflow.py --list
+
+      - name: Assert the bundle loads nothing from a CDN
+        # The UI has to work on a machine with no egress; a CDN reference is a
+        # silent runtime failure there, so it fails the build here instead.
+        run: |
+          if grep -rEl "https?://(cdn|unpkg|jsdelivr)" dist/; then
+            echo "The built bundle references an external host." >&2
+            exit 1
+          fi
+
+  container:
+    name: Container
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build the image and prove what it ships
+        # One script rather than a dozen inline steps, so the same assertions
+        # an engineer can run locally are the ones the pipeline runs. KEEP
+        # leaves it up for the browser check below.
+        run: KEEP=1 PORT=8000 NAME=devlens scripts/smoke-container.sh
+
+      - name: The shipped image drives a real browser
+        # The e2e suite again, but against the container rather than a working
+        # copy: the bundle inside the image is what an operator loads, so it is
+        # what the accessibility audit and the layout checks have to run on.
+        working-directory: web
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          PW_BASE_URL=http://127.0.0.1:8000 npx playwright test
+
+      - name: Stop
+        if: always()
+        run: docker rm -f devlens || true

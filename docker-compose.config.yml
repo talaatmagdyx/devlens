@@ -1,0 +1,8 @@
+# Optional overlay when using TOML multi-project config:
+#   docker compose -f docker-compose.yml -f docker-compose.config.yml up --build
+services:
+  devlens:
+    environment:
+      DEVLENS_CONFIG: /config/devlens.toml
+    volumes:
+      - ./devlens.toml:/config/devlens.toml:ro
