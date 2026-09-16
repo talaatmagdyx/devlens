@@ -1,4 +1,17 @@
 import { defineConfig } from "@playwright/test";
+import { existsSync } from "node:fs";
+
+/**
+ * Where Chromium lives.
+ *
+ * Some environments ship a browser already and block the download host, so the
+ * suite has to use what is there; a hosted runner installs its own into the
+ * Playwright cache and has no such path. Pinning one machine's absolute path
+ * unconditionally is what broke CI: the file simply does not exist there.
+ * Point PW_CHROMIUM at a binary to override.
+ */
+const PREINSTALLED = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+const chromium = process.env.PW_CHROMIUM ?? (existsSync(PREINSTALLED) ? PREINSTALLED : "");
 
 /**
  * Real-browser end-to-end tests.
@@ -44,7 +57,8 @@ export default defineConfig({
       name: "chromium",
       use: {
         browserName: "chromium",
-        launchOptions: { executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome" },
+        // Empty means "whatever `playwright install` put in the cache".
+        ...(chromium ? { launchOptions: { executablePath: chromium } } : {}),
       },
     },
   ],

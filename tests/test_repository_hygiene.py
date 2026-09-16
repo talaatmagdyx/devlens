@@ -187,6 +187,24 @@ def test_the_browser_suite_can_be_pointed_at_an_already_running_deployment():
     )
 
 
+def test_the_browser_suite_pins_no_machine_of_its_own():
+    """The bug this catches ran green locally and failed on the first push.
+
+    The config hard-coded the absolute path of the Chromium that happens to be
+    installed in one container. A hosted runner installs its own into the
+    Playwright cache, so that path does not exist and every browser test dies
+    before the first navigation — in the two jobs whose whole purpose is the
+    browser.
+    """
+    config = read("web/playwright.config.ts")
+    assert "existsSync" in config, (
+        "an environment-specific browser path must be probed, never assumed"
+    )
+    for line in config.splitlines():
+        if "executablePath" in line and "//" not in line:
+            assert "/opt/" not in line, f"absolute browser path pinned: {line.strip()}"
+
+
 def test_the_browser_suite_pins_no_port_of_its_own():
     """A hard-coded origin in a spec silently only tests the working copy."""
     for spec in (ROOT / "web" / "e2e").glob("*.spec.ts"):
